@@ -1,0 +1,27 @@
+#Cargar el paquete ggplot2
+library(ggplot2)
+
+#Graficar los datos observados de DatosObs
+##Convertir en factor a Mes para poder graficarlo
+DatosObs$Mes <- factor(DatosObs$Mes)
+
+#Según stackoverflow: 
+pd=position_dodge(0.5)
+
+#Graficar precipitacion mensual (suma)
+prec_stations <- ggplot(DatosObs, aes(Mes, HourSumPrec, colour=Estaciones, group=Estaciones)) +
+  stat_summary(fun.y=sum, geom="line", position=pd) +
+  stat_summary(fun.y=sum, geom="point", position=pd) +
+  theme_bw()
+
+
+prec_stations + labs(x = "Mes", y = 'Suma precipitacion mensual')
+
+#Graficar temperatura mensual (promedio)
+temp_stations <-ggplot(DatosObs, aes(Mes, HourTemAve, colour=Estaciones, group=Estaciones)) +
+  stat_summary(fun.y=mean, geom="line", position=pd) +
+  stat_summary(fun.y=mean, geom="point", position=pd) +
+  theme_bw()
+
+
+temp_stations + labs(y = "Temperatura media mensual")
