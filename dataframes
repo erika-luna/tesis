@@ -1,0 +1,244 @@
+#INTERPOLACION DE LOS LOS VALORES DE CADA ESTACION
+##Los datos observados tienen 6 obs. cada hora y los datos WRF son cada hora. 
+###Interpolamos los observados para que haya 1 obs./hora.
+
+###Funciones:
+
+##Perform linear interpolation for missing values
+LinearInterpol<- function (x) {
+  Precipitacion<-na.approx(x[,3],  na.rm = TRUE) 
+  Temperatura<-na.approx(x[,4],  na.rm = TRUE) 
+  Weather<-cbind(Precipitacion,Temperatura)
+  return(Weather)
+}
+
+##Get hourly precipitation and temperature
+HourlyData<-function(Data){
+  HourSumPrec <- rollapply(Data[,1],6,(sum),by=6,by.column=TRUE,align='right')
+  #length(HourSumPrec)##8760 correct
+  HourTemAve <- rollapply(Data[,2],6,(mean),by=6,by.column=TRUE,align='right')
+  #length(HourTemAve)##8760 correct
+  WeatherHour<-cbind(HourSumPrec,HourTemAve)
+  return(WeatherHour)
+}
+
+#Aplicamos las funciones a nuestros datos observados
+Atlacointerpol <-  LinearInterpol(Atlacomulco_2013)
+Atlacohourly<-  HourlyData(Atlacointerpol)
+
+Cerrointerpol <- LinearInterpol(CerroCatedral_2013)
+Cerrohourly <- HourlyData(Cerrointerpol)
+
+Ecoguardasinterpol <- LinearInterpol(Ecoguardas_2013)
+Ecoguardashourly <- HourlyData(Ecoguardasinterpol)
+
+Chicointerpol <- LinearInterpol(ElChico_2013)
+Chicohourly <- HourlyData(Chicointerpol)
+
+Iztainterpol <- LinearInterpol(IztaPopo_2013)
+Iztahourly <- HourlyData(Iztainterpol)
+
+Nevadointerpol <- LinearInterpol(NevadoToluca_2013)
+Nevadohourly <- HourlyData(Nevadointerpol)
+
+Presainterpol <- LinearInterpol(PresaMadin_2013)
+Presahourly <- HourlyData(Presainterpol)
+
+
+
+#Generamos una tabla (dataframe) con todas las estaciones interpoladas. 
+DatosObs <- as.data.frame(rbind(Atlacohourly, Cerrohourly, Ecoguardashourly, Chicohourly, Iztahourly, Nevadohourly, Presahourly))
+
+#Generamos una nueva columna para poner el nombre de la estación correspondiente.
+Estaciones <- c("Atlacomulco", "Cerro", "Ecoguardas", "Chico", "Izta", "Nevado", "Presa")
+Nueva <- rep(Estaciones, each=length(Ecoguardashourly[,1]))
+
+#Le ponemos nombre a nuestra nueva columna
+DatosObs$Estaciones <- Nueva
+
+#Creamos una columna con la fecha y la hora.
+start <- as.POSIXct("2013-01-01")
+interval <- 60
+end <- start + as.difftime(365, units="days")
+x<-seq(from=start, by=interval*60, to=end)
+FechaHora<- as.factor(x[1:8760])
+
+#Creamos un objeto que guarde el numero de estaciones
+numeroestaciones <- 7
+
+#Vector que integrará la fecha y la hora.
+Tiempo <- rep(FechaHora, times = numeroestaciones)
+
+#Nombramos nuestra columna como "Fecha"
+DatosObs$Fecha <- Tiempo
+str(DatosObs)
+
+
+#Separamos la fecha en mes, dia, hora.
+hola <-  as.character(DatosObs$Fecha) 
+
+destring <- function(x){
+  a <- strsplit(x, "-")[[1]]
+  a[2]
+}
+
+
+destringdia <- function(x){
+  a <- strsplit(x, " ")[[1]]
+  b <- strsplit(a, "-")[[1]]
+  b[3]
+}
+
+destringhora <- function(x){
+  a <- strsplit(x, " ")[[1]]
+  a[2]
+}
+
+#nuevo
+destringhora3 <- function(x){
+  a <- strsplit(x, ":")[[1]]
+  a[3]
+} 
+Mes <- rep(0,61320)
+Dia <- rep(0,61320)
+Hora <- rep(0,61320)
+
+for (i in 1:61320){
+  Mes[i] <- destring(hola[i])
+  Dia[i] <- destringdia(hola[i])
+  Hora[i]<- destringhora(hola[i])
+} 
+
+DatosObs$Mes <- Mes
+DatosObs$Dia <- Dia
+DatosObs$Hora <- Hora
+
+
+#Eliminamos columna de fecha
+DatosObs$Fecha <- NULL
+
+#Elimnamos 31 de mayo
+mayo_31 <- DatosObs[-which(DatosObs$Mes == "05" & DatosObs$Dia > 30),]
+mayo_31
+
+#Integramos esta actualizacion a nuestra tabla principal
+DatosObs <- mayo_31
+
+jul <- DatosObs[-which(DatosObs$Mes == "07" & DatosObs$Dia == 31 & DatosObs$Hora == "14:00:00" ), ]
+
+
+
+
+
+
+
+#eliminamos de las 14 a las 23 hrs del 31 de julio
+julio_01 <- DatosObs[ ! ( ( DatosObs$Mes == "07" & DatosObs$Dia == 31 & DatosObs$Hora == "14:00:00" )), ]
+julio_02 <- julio_01[ ! ( ( julio_01$Mes == "07" & julio_01$Dia == 31 & julio_01$Hora == "15:00:00" )), ]
+julio_03 <- julio_02[ ! ( ( julio_02$Mes == "07" & julio_02$Dia == 31 & julio_02$Hora == "16:00:00" )), ]
+julio_04 <- julio_03[ ! ( ( julio_03$Mes == "07" & julio_03$Dia == 31 & julio_03$Hora == "17:00:00" )), ]
+julio_05 <- julio_04[ ! ( ( julio_04$Mes == "07" & julio_04$Dia == 31 & julio_04$Hora == "18:00:00" )), ]
+julio_06 <- julio_05[ ! ( ( julio_05$Mes == "07" & julio_05$Dia == 31 & julio_05$Hora == "19:00:00" )), ]
+julio_07 <- julio_06[ ! ( ( julio_06$Mes == "07" & julio_06$Dia == 31 & julio_06$Hora == "20:00:00" )), ]
+julio_08 <- julio_07[ ! ( ( julio_07$Mes == "07" & julio_07$Dia == 31 & julio_07$Hora == "21:00:00" )), ]
+julio_09 <- julio_08[ ! ( ( julio_08$Mes == "07" & julio_08$Dia == 31 & julio_08$Hora == "22:00:00" )), ]
+julio_10 <- julio_09[ ! ( ( julio_09$Mes == "07" & julio_09$Dia == 31 & julio_09$Hora == "23:00:00" )), ]
+
+#Integramos esta actualizacion a nuestra tabla principal
+DatosObs <- julio_10
+
+tmp <- DatosObs[DatosObs$Mes == "05" | DatosObs$Mes == "06"| DatosObs$Mes == "07"| DatosObs$Mes == "08"
+                | DatosObs$Mes == "09"| DatosObs$Mes == "10"| DatosObs$Mes == "11", ]
+
+DatosObs <- tmp
+
+
+nov_03_01 <- DatosObs[which(DatosObs$Mes =='11' 
+                            & DatosObs$Dia == '03'
+                            & DatosObs$Hora == '01:00:00'), ]
+
+
+nov <- DatosObs[which(DatosObs$Mes =='11' 
+                            & DatosObs$HourTemAve == '3.633333'), ]
+
+
+9.583333
+3.633333
+11.600000
+1.266667
+7.566667
+3.400000
+9.766667
+
+newdata <- mydata[ which(mydata$gender=='F' 
+                         & mydata$age > 65), ]
+
+
+
+###Importamos datos de WRF
+
+#Eliminamos el ??nico dato que hay del 31 de mayo (porque en DatosObs eliminamos el d??a completo)
+tmp <- wrfout_temp_rain_2013[-which(wrfout_temp_rain_2013$V1 == "2013-05-31"),]
+tmp
+
+#Nos quedamos s??lo con las columnas de temp. y precipitaciones
+DatosWRF <- as.data.frame (tmp[1:23])
+
+#Agrupamos las estaciones en la misma columna
+Temp_WRF <- stack(DatosWRF, 
+                  select=c(V3, V6, V9, V12, V15, V18, V21))
+colnames(Temp_WRF) <- c("Temp", "Estaciones")
+
+P1_WRF <- stack(DatosWRF,
+                select = c(V4, V7, V10, V13, V16, V19, V22))
+colnames(P1_WRF) <- c("P1", "Estaciones")
+
+P2_WRF <- stack(DatosWRF,
+                select = c(V5, V8, V11, V14, V17, V20, V23))
+colnames(P2_WRF) <- c("P2", "Estaciones")
+
+
+
+lala <- rep(DatosWRF$V1, times=7)
+lalala <- rep(DatosWRF$V2, times=7)
+
+WRF_out <- cbind.data.frame(Temp_WRF[,1], P1_WRF[,1], P2_WRF[,1])
+
+WRF_out$fechas <- lala
+
+WRF_out$hora <- lalala
+
+
+
+#Integramos esta actualizacion a nuestra tabla principal (DatosWRF)
+DatosWRF <- WRF_out
+
+#Agregamos columna de meses
+Ene <- rep(c("Ene") , each=337)
+Feb <- rep(c("Feb") , each=628)
+Mar <- rep(c("Mar") , each=721)
+Abr <- rep(c("Abr") , each=487)
+May <- rep(c("May") , each=720)
+Jun <- rep(c("Jun") , each=720)
+Jul <- rep(c("Jul") , each=734)
+Ago <- rep(c("Ago") , each=744)
+Sep <- rep(c("Sep") , each=720) 
+Oct <- rep(c("Oct") , each=744)     
+Nov <- rep(c("Nov") , each=720)
+Dic <- rep(c("Dic") , each=727)            
+
+Meses <- c(Ene, Feb, Mar, Abr, May, Jun, Jul, Ago, Sep, Oct, Nov, Dic)   
+Nueva <- rep(Meses, times=7)
+
+
+
+DatosWRF$Meses <- Nueva
+
+
+tmp <- DatosWRF[DatosWRF$Meses == "May" | DatosWRF$Meses == "Jun"| DatosWRF$Meses == "Jul"| DatosWRF$Meses == "Ago"
+               | DatosWRF$Meses == "Sep"| DatosWRF$Meses == "Oct"| DatosWRF$Meses == "Nov", ]
+
+DatosWRF <- tmp
+
+#Unimos las tablas "DatosObs" y "DatosWRF"
+Datos_Obs_WRF <- cbind(DatosObs,DatosWRF)
