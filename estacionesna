@@ -1,0 +1,741 @@
+#ESTACIONES CON NAs
+
+
+############## FUNCIONES ##############
+#INTERPOLACION LINEAL para missing values:
+#Cargar paquete zoo.
+
+LinearInterpol<- function (x) {
+  Precipitacion<-na.approx(x[,3],  na.rm = FALSE) 
+  Temperatura<-na.approx(x[,2],  na.rm = FALSE) 
+  Weather<-cbind(Precipitacion,Temperatura)
+  return(Weather)
+}
+
+#SEPARAR MES, DIA, HORA. 
+destringmes <- function(x){
+  a <- strsplit(x, "-")[[1]]
+  a[2]
+}
+
+destringdia <- function(x){
+  a <- strsplit(x, " ")[[1]]
+  b <- strsplit(a, "-")[[1]]
+  b[3]
+}
+
+destringhora <- function(x){
+  a <- strsplit(x, " ")[[1]]
+  a[2]
+}
+
+Mes <- rep(0,4462)
+Dia <- rep(0,4464)
+Hora <- rep(0,4464)
+
+for (i in 1:4464){
+  Mes[i] <- destringmes(separafecha[i])
+  Dia[i] <- destringdia(separafecha[i])
+  Hora[i]<- destringhora(separafecha[i])
+} 
+
+###### ESTACION ALTZOMONI #######
+#Importamos la base de datos observados de la estación. 
+library(readxl)
+ALTZ_07_13 <- read_excel("/Volumes/Seagate/Tesis/obs_julio/ALTZ_07_13.xlsx")
+View(ALTZ_07_13)
+
+#Nos quedamos con las columnas de las variables "fecha", "TempAire" y "Precipitacion".
+myvars <- c("fecha", "TempAire", "Precipitacion")
+ALTZ_07_13 <- ALTZ_07_13[myvars]
+
+#Determinamos el numero de NAs en las dos variables
+sum(is.na(ALTZ_07_13$TempAire)) #15 NA. 10 intermedios y los últimos 5. 
+sum(is.na(ALTZ_07_13$Precipitacion)) #15 NA. 10 intermedios y los últimos 5.
+
+#Para los 10 NA intermedios corremos la funcion de interpolacion lineal. 
+ALTZ_interpol <- as.data.frame(LinearInterpol(ALTZ_07_13))
+
+#Los ultimos 5 NA los llenamos con el ultimo valor registrado. 
+ALTZ_interpol$TempAire[is.na(ALTZ_07_13_interpol$TempAire)] <- 9.8
+
+ALTZ_interpol$Precipitacion[is.na(ALTZ_07_13_interpol$Precipitacion)] <- 0
+
+#Agregamos columna de fecha a ALTZ_interpol. 
+ALTZ_observados <- cbind(ALTZ_07_13$fecha, ALTZ_interpol)
+colnames(ALTZ_observados) <- c("Fecha", "Prec", "Temp")
+
+#Separamos la fecha en Mes, Dia y Hora.
+separafecha <- as.character(ALTZ_observados$Fecha)
+
+ALTZ_observados$Mes <- Mes
+ALTZ_observados$Dia <- Dia
+ALTZ_observados$Hora <- Hora
+
+#Para la variable de temperatura extraemos solo los datos de cada hora exacta.
+ALTZ_horaria <- subset(ALTZ_observados, ALTZ_observados$Hora == '00:00:00' | 
+                                 ALTZ_observados$Hora == '01:00:00' | ALTZ_observados$Hora == '02:00:00' | 
+                                 ALTZ_observados$Hora == '03:00:00' | ALTZ_observados$Hora == '04:00:00' | 
+                                 ALTZ_observados$Hora == '05:00:00' | ALTZ_observados$Hora == '06:00:00' |
+                                 ALTZ_observados$Hora == '07:00:00' | ALTZ_observados$Hora == '08:00:00' | 
+                                 ALTZ_observados$Hora == '09:00:00' | ALTZ_observados$Hora == '10:00:00' |
+                                 ALTZ_observados$Hora == '11:00:00' | ALTZ_observados$Hora == '12:00:00' |
+                                 ALTZ_observados$Hora == '13:00:00' | ALTZ_observados$Hora == '14:00:00' |
+                                 ALTZ_observados$Hora == '15:00:00' | ALTZ_observados$Hora == '16:00:00' |
+                                 ALTZ_observados$Hora == '17:00:00' | ALTZ_observados$Hora == '18:00:00' |
+                                 ALTZ_observados$Hora == '19:00:00' | ALTZ_observados$Hora == '20:00:00' |
+                                 ALTZ_observados$Hora == '21:00:00' | ALTZ_observados$Hora == '22:00:00' |
+                                 ALTZ_observados$Hora == '23:00:00')
+
+#DATOS MODELADOS. 
+#Obtenemos de la base de datos de WRF los correspondientes a Altzomoni: 
+ALTZ_vars <- c("ALTZ_T", "ALTZ_P1", "ALTZ_P2")
+ALTZ_07_13_WRF <- wrf[ALTZ_vars]
+
+#Convertimos la columna de temperatura a grados centigrados:
+ALTZ_07_13_WRF$ALTZ_T <- ALTZ_07_13_WRF$ALTZ_T - 273
+
+
+########### TABLA TEMPERATURA #############
+
+#MERGE TEMPERATURA OBSERVADA Y MODELADA
+ALTZ_temperatura <- as.data.frame(cbind(ALTZ_horaria$Temp, ALTZ_07_13_WRF$ALTZ_T))
+colnames(ALTZ_temperatura) <- c("TempObs", "TempWRF")
+
+
+#Convertimos de factor a numeric los valores de temperatura. 
+ALTZ_temperatura$TempObs <- as.numeric(as.character(ALTZ_temperatura$TempObs))
+ALTZ_temperatura$TempWRF <- as.numeric(as.character(ALTZ_temperatura$TempWRF))
+
+ALTZ_diffobsmod <- ALTZ_temperatura$TempWRF-ALTZ_temperatura$TempObs
+ALTZt_temp_meandiff <- mean(ALTZ_diffobsmod)
+
+mean(ALTZ_temperatura$TempObs)
+mean(ALTZ_temperatura$TempWRF)
+
+
+############# PRECIPITACION ACUMULADA DIARIA ##############
+
+#FUNCIONES
+#Funcion para precipitacion acumulada por hora:
+
+HourlyData<-function(Data){
+  HourSumPrec <- rollapply(Data[,1],6,(sum),by=6,by.column=TRUE,align='right')
+  WeatherHour<- HourSumPrec
+  return(WeatherHour)
+}
+
+#Corremos la función para los datos observados previamente interpolados. 
+#Los datos observados vienen con 6 observaciones por hora, lo que hace la funcion HourlyData es sumar 
+#esas observaciones y juntarlas en una hora.Los datos de WRF ya vienen cada hora. 
+ALTZ_prec_acum_horaria <- as.data.frame(HourlyData(ALTZ_interpol))
+colnames(ALTZ_prec_acum_horaria) <- c("Prec_hour")
+
+
+
+ALTZ_precwrf <- subset(Obs_WRF, Obs_WRF$Estacion == 'ALTZ', select = PrecWRF)
+
+#Funcion para precipitacion acumulada diaria
+DailyData<-function(Data){
+  DailyPrec <- rollapply(Data[,1],24,(sum),by=24,by.column=TRUE,align='right')
+  WeatherDay <- DailyPrec
+  return(WeatherDay)
+}
+
+ALTZ_precobs_daily <- as.data.frame(DailyData(ALTZ_precobs))
+
+ALTZ_precwrf_daily <- as.data.frame(DailyData(ALTZ_precwrf))
+
+ALTZ_prec_daily <- cbind(ALTZ_precobs_daily, ALTZ_precwrf_daily)
+colnames(ALTZ_prec_daily) <- c("DailyPrecOBS", "DailyPrecWRF")
+
+Dia <- c(1:31)
+ALTZ_prec_daily$Dia <- Dia
+
+ALTZ_diff_obswrf <- ALTZ_prec_daily$DailyPrecWRF-ALTZ_prec_daily$DailyPrecOBS
+mean(ALTZ_diff_obswrf)
+
+##grafica obs acumulado diario vs. wrf acumulado diario
+prec_diaria <- stack(prec_final_diaria, select = c("DailyPrecOBS", "DailyPrecWRF"))
+prec_diaria$Dia <- Dia
+
+prec_diaria_gg <- ggplot(prec_diaria, aes(x=Dia, y=values, group=ind, colour=ind))+
+  geom_line()
+
+
+
+###promedio mensual
+ALTZ_PrecObs_average <- mean(prec_final_diaria$DailyPrecOBS)
+
+ALTZ_PrecWRF_average <- mean(prec_final_diaria$DailyPrecWRF)
+
+
+############### FIN PP ACUMULADA DIARIA Y PROMEDIO MENSUAL #################
+
+
+############ ESTACION IZUCAR DE MATAMOROS ############
+
+#Importamos la base de datos observados de la estación. 
+library(readxl)
+IZMT_07_13 <- read_excel("/Volumes/Seagate/Tesis/obs_julio/IZMT_07_13.xlsx")
+View(IZMT_07_13)
+
+#Nos quedamos con las columnas de las variables "fecha", "TempAire" y "Precipitacion".
+myvars <- c("fecha", "TempAire", "Precipitacion")
+IZMT_07_13 <- IZMT_07_13[myvars]
+
+#Determinamos el numero de NAs en las dos variables
+sum(is.na(IZMT_07_13$TempAire)) #45 NA. Todos intermedios. 
+sum(is.na(IZMT_07_13$Precipitacion)) #42 NA. Todos intermedios. 
+
+#Corremos la funcion de interpolacion lineal. 
+IZMT_interpol <- as.data.frame(LinearInterpol(IZMT_07_13))
+
+#Agregamos columna de fecha a ALTZ_interpol. 
+IZMT_observados <- cbind(IZMT_07_13$fecha, IZMT_interpol)
+colnames(IZMT_observados) <- c("Fecha", "Prec", "Temp")
+
+#Separamos la fecha en Mes, Dia y Hora.
+separafecha <- as.character(IZMT_observados$Fecha)
+
+IZMT_observados$Mes <- Mes
+IZMT_observados$Dia <- Dia
+IZMT_observados$Hora <- Hora
+
+
+#Para la variable de temperatura extraemos solo los datos de cada hora exacta.
+IZMT_horaria <- subset(IZMT_observados, IZMT_observados$Hora == '00:00:00' | 
+                         IZMT_observados$Hora == '01:00:00' | IZMT_observados$Hora == '02:00:00' | 
+                         IZMT_observados$Hora == '03:00:00' | IZMT_observados$Hora == '04:00:00' | 
+                         IZMT_observados$Hora == '05:00:00' | IZMT_observados$Hora == '06:00:00' |
+                         IZMT_observados$Hora == '07:00:00' | IZMT_observados$Hora == '08:00:00' | 
+                         IZMT_observados$Hora == '09:00:00' | IZMT_observados$Hora == '10:00:00' |
+                         IZMT_observados$Hora == '11:00:00' | IZMT_observados$Hora == '12:00:00' |
+                         IZMT_observados$Hora == '13:00:00' | IZMT_observados$Hora == '14:00:00' |
+                         IZMT_observados$Hora == '15:00:00' | IZMT_observados$Hora == '16:00:00' |
+                         IZMT_observados$Hora == '17:00:00' | IZMT_observados$Hora == '18:00:00' |
+                         IZMT_observados$Hora == '19:00:00' | IZMT_observados$Hora == '20:00:00' |
+                         IZMT_observados$Hora == '21:00:00' | IZMT_observados$Hora == '22:00:00' |
+                         IZMT_observados$Hora == '23:00:00')
+
+#DATOS MODELADOS. 
+#Obtenemos de la base de datos de WRF los correspondientes a Altzomoni: 
+IZMT_vars <- c("IZMT_T", "IZMT_P1", "IZMT_P2")
+IZMT_07_13_WRF <- wrf[IZMT_vars]
+
+#Convertimos la columna de temperatura a grados centigrados:
+IZMT_07_13_WRF$IZMT_T <- IZMT_07_13_WRF$IZMT_T - 273
+
+
+#TABLA TEMPERATURA  
+#Merge temoeratura modelada y observada. 
+IZMT_temperatura <- as.data.frame(cbind(IZMT_horaria$Temp, IZMT_07_13_WRF$IZMT_T))
+colnames(IZMT_temperatura) <- c("TempObs", "TempWRF")
+
+#Convertimos de factor a numeric los valores de temperatura. 
+IZMT_temperatura$TempObs <- as.numeric(as.character(IZMT_temperatura$TempObs))
+IZMT_temperatura$TempWRF <- as.numeric(as.character(IZMT_temperatura$TempWRF))
+
+IZMT_diffobsmod <- IZMT_temperatura$TempWRF-IZMT_temperatura$TempObs
+IZMT_temp_meandiff <- mean(IZMT_diffobsmod)
+
+mean(IZMT_temperatura$TempObs)
+mean(IZMT_temperatura$TempWRF)
+
+
+################# ESTACION EL CHICO ###################
+
+#Importamos la base de datos observados de la estación. 
+library(readxl)
+LCHI_07_13 <- read_excel("/Volumes/Seagate/Tesis/obs_julio/LCHI_07_13.xlsx")
+View(LCHI_07_13)
+
+#Nos quedamos con las columnas de las variables "fecha", "TempAire" y "Precipitacion".
+myvars <- c("fecha", "TempAire", "Precipitacion")
+LCHI_07_13 <- LCHI_07_13[myvars]
+
+#Determinamos el numero de NAs en las dos variables
+sum(is.na(LCHI_07_13$TempAire)) #5 NA. Las 5 últimas observaciones. 
+sum(is.na(LCHI_07_13$Precipitacion)) #5 NA. Las 5 últimas observaciones 
+
+
+##Los ultimos 5 registros (NA) los llenamos con el ultimo valor registrado. 
+LCHI_07_13$TempAire[is.na(LCHI_07_13$TempAire)] <- 13.7
+LCHI_07_13$Precipitacion[is.na(LCHI_07_13$Precipitacion)] <- 0
+
+
+#Agregamos columna de fecha a ALTZ_interpol. 
+LCHI_observados <- LCHI_07_13
+colnames(LCHI_observados) <- c("Fecha", "Temp", "Prec")
+
+#Separamos la fecha en Mes, Dia y Hora.
+separafecha <- as.character(LCHI_observados$Fecha)
+
+LCHI_observados$Mes <- Mes
+LCHI_observados$Dia <- Dia
+LCHI_observados$Hora <- Hora
+
+
+#Para la variable de temperatura extraemos solo los datos de cada hora exacta.
+LCHI_horaria <- subset(LCHI_observados, LCHI_observados$Hora == '00:00:00' | 
+                         LCHI_observados$Hora == '01:00:00' | LCHI_observados$Hora == '02:00:00' | 
+                         LCHI_observados$Hora == '03:00:00' | LCHI_observados$Hora == '04:00:00' | 
+                         LCHI_observados$Hora == '05:00:00' | LCHI_observados$Hora == '06:00:00' |
+                         LCHI_observados$Hora == '07:00:00' | LCHI_observados$Hora == '08:00:00' | 
+                         LCHI_observados$Hora == '09:00:00' | LCHI_observados$Hora == '10:00:00' |
+                         LCHI_observados$Hora == '11:00:00' | LCHI_observados$Hora == '12:00:00' |
+                         LCHI_observados$Hora == '13:00:00' | LCHI_observados$Hora == '14:00:00' |
+                         LCHI_observados$Hora == '15:00:00' | LCHI_observados$Hora == '16:00:00' |
+                         LCHI_observados$Hora == '17:00:00' | LCHI_observados$Hora == '18:00:00' |
+                         LCHI_observados$Hora == '19:00:00' | LCHI_observados$Hora == '20:00:00' |
+                         LCHI_observados$Hora == '21:00:00' | LCHI_observados$Hora == '22:00:00' |
+                         LCHI_observados$Hora == '23:00:00')
+
+#DATOS MODELADOS. 
+#Obtenemos de la base de datos de WRF los correspondientes a Altzomoni: 
+LCHI_vars <- c("LCHI_T", "LCHI_P1", "LCHI_P2")
+LCHI_07_13_WRF <- wrf[LCHI_vars]
+
+#Convertimos la columna de temperatura a grados centigrados:
+LCHI_07_13_WRF$LCHI_T <- LCHI_07_13_WRF$LCHI_T - 273
+
+#TABLA TEMPERATURA  
+#Merge temoeratura modelada y observada. 
+LCHI_temperatura <- as.data.frame(cbind(LCHI_horaria$Temp, LCHI_07_13_WRF$LCHI_T))
+colnames(LCHI_temperatura) <- c("TempObs", "TempWRF")
+
+#Convertimos de factor a numeric los valores de temperatura. 
+LCHI_temperatura$TempObs <- as.numeric(as.character(LCHI_temperatura$TempObs))
+LCHI_temperatura$TempWRF <- as.numeric(as.character(LCHI_temperatura$TempWRF))
+
+LCHI_diffobsmod <- LCHI_temperatura$TempWRF-LCHI_temperatura$TempObs
+LCHI_temp_meandiff <- mean(LCHI_diffobsmod)
+
+mean(LCHI_temperatura$TempObs)
+mean(LCHI_temperatura$TempWRF)
+
+############### ESTACION LAGUNAS DE ZEMPOALA ####################
+
+#Importamos la base de datos observados de la estación. 
+library(readxl)
+LGZM_07_13 <- read_excel("/Volumes/Seagate/Tesis/obs_julio/LGZM_07_13.xlsx")
+View(LGZM_07_13)
+
+#Nos quedamos con las columnas de las variables "fecha", "TempAire" y "Precipitacion".
+myvars <- c("fecha", "TempAire", "Precipitacion")
+LGZM_07_13 <- LGZM_07_13[myvars]
+
+#Determinamos el numero de NAs en las dos variables
+sum(is.na(LGZM_07_13$TempAire)) #4 NA. Las 4 últimas observaciones. 
+sum(is.na(LGZM_07_13$Precipitacion)) #4 NA. Las 4 últimas observaciones 
+
+
+##Los ultimos 5 registros (NA) los llenamos con el ultimo valor registrado. 
+LGZM_07_13$TempAire[is.na(LGZM_07_13$TempAire)] <- 16.5
+LGZM_07_13$Precipitacion[is.na(LGZM_07_13$Precipitacion)] <- 0
+
+
+#Agregamos columna de fecha a ALTZ_interpol. 
+LGZM_observados <- LGZM_07_13
+colnames(LGZM_observados) <- c("Fecha", "Temp", "Prec")
+
+#Separamos la fecha en Mes, Dia y Hora.
+separafecha <- as.character(LGZM_observados$Fecha)
+
+LGZM_observados$Mes <- Mes
+LGZM_observados$Dia <- Dia
+LGZM_observados$Hora <- Hora
+
+
+#Para la variable de temperatura extraemos solo los datos de cada hora exacta.
+LGZM_horaria <- subset(LGZM_observados, LGZM_observados$Hora == '00:00:00' | 
+                         LGZM_observados$Hora == '01:00:00' | LGZM_observados$Hora == '02:00:00' | 
+                         LGZM_observados$Hora == '03:00:00' | LGZM_observados$Hora == '04:00:00' | 
+                         LGZM_observados$Hora == '05:00:00' | LGZM_observados$Hora == '06:00:00' |
+                         LGZM_observados$Hora == '07:00:00' | LGZM_observados$Hora == '08:00:00' | 
+                         LGZM_observados$Hora == '09:00:00' | LGZM_observados$Hora == '10:00:00' |
+                         LGZM_observados$Hora == '11:00:00' | LGZM_observados$Hora == '12:00:00' |
+                         LGZM_observados$Hora == '13:00:00' | LGZM_observados$Hora == '14:00:00' |
+                         LGZM_observados$Hora == '15:00:00' | LGZM_observados$Hora == '16:00:00' |
+                         LGZM_observados$Hora == '17:00:00' | LGZM_observados$Hora == '18:00:00' |
+                         LGZM_observados$Hora == '19:00:00' | LGZM_observados$Hora == '20:00:00' |
+                         LGZM_observados$Hora == '21:00:00' | LGZM_observados$Hora == '22:00:00' |
+                         LGZM_observados$Hora == '23:00:00')
+
+#DATOS MODELADOS. 
+#Obtenemos de la base de datos de WRF los correspondientes a Altzomoni: 
+LGZM_vars <- c("LGZM_T", "LGZM_P1", "LGZM_P2")
+LGZM_07_13_WRF <- wrf[LGZM_vars]
+
+#Convertimos la columna de temperatura a grados centigrados:
+LGZM_07_13_WRF$LGZM_T <- LGZM_07_13_WRF$LGZM_T - 273
+
+#TABLA TEMPERATURA  
+#Merge temoeratura modelada y observada. 
+LGZM_temperatura <- as.data.frame(cbind(LGZM_horaria$Temp, LGZM_07_13_WRF$LGZM_T))
+colnames(LGZM_temperatura) <- c("TempObs", "TempWRF")
+
+#Convertimos de factor a numeric los valores de temperatura. 
+LGZM_temperatura$TempObs <- as.numeric(as.character(LGZM_temperatura$TempObs))
+LGZM_temperatura$TempWRF <- as.numeric(as.character(LGZM_temperatura$TempWRF))
+
+LGZM_diffobsmod <- LGZM_temperatura$TempWRF-LGZM_temperatura$TempObs
+LGZM_temp_meandiff <- mean(LGZM_diffobsmod)
+
+mean(LGZM_temperatura$TempObs)
+mean(LGZM_temperatura$TempWRF)
+
+############### ESTACION LA MALINCHE I #####################
+
+#Importamos la base de datos observados de la estación. 
+library(readxl)
+LMLI_07_13 <- read_excel("/Volumes/Seagate/Tesis/obs_julio/LMLI_07_13.xlsx")
+View(LMLI_07_13)
+
+#Nos quedamos con las columnas de las variables "fecha", "TempAire" y "Precipitacion".
+myvars <- c("fecha", "TempAire", "Precipitacion")
+LMLI_07_13 <- LMLI_07_13[myvars]
+
+#Determinamos el numero de NAs en las dos variables
+sum(is.na(LMLI_07_13$TempAire)) # 5 NA. Las 5 últimas observaciones. 
+sum(is.na(LMLI_07_13$Precipitacion)) # 5 NA. Las 5 últimas observaciones 
+
+
+##Los ultimos 5 registros (NA) los llenamos con el ultimo valor registrado. 
+LMLI_07_13$TempAire[is.na(LMLI_07_13$TempAire)] <- 19.3
+LMLI_07_13$Precipitacion[is.na(LMLI_07_13$Precipitacion)] <- 0
+
+
+#Agregamos columna de fecha a ALTZ_interpol. 
+LMLI_observados <- LMLI_07_13
+colnames(LMLI_observados) <- c("Fecha", "Temp", "Prec")
+
+#Separamos la fecha en Mes, Dia y Hora.
+separafecha <- as.character(LMLI_observados$Fecha)
+
+LMLI_observados$Mes <- Mes
+LMLI_observados$Dia <- Dia
+LMLI_observados$Hora <- Hora
+
+
+#Para la variable de temperatura extraemos solo los datos de cada hora exacta.
+LMLI_horaria <- subset(LMLI_observados, LMLI_observados$Hora == '00:00:00' | 
+                         LMLI_observados$Hora == '01:00:00' | LMLI_observados$Hora == '02:00:00' | 
+                         LMLI_observados$Hora == '03:00:00' | LMLI_observados$Hora == '04:00:00' | 
+                         LMLI_observados$Hora == '05:00:00' | LMLI_observados$Hora == '06:00:00' |
+                         LMLI_observados$Hora == '07:00:00' | LMLI_observados$Hora == '08:00:00' | 
+                         LMLI_observados$Hora == '09:00:00' | LMLI_observados$Hora == '10:00:00' |
+                         LMLI_observados$Hora == '11:00:00' | LMLI_observados$Hora == '12:00:00' |
+                         LMLI_observados$Hora == '13:00:00' | LMLI_observados$Hora == '14:00:00' |
+                         LMLI_observados$Hora == '15:00:00' | LMLI_observados$Hora == '16:00:00' |
+                         LMLI_observados$Hora == '17:00:00' | LMLI_observados$Hora == '18:00:00' |
+                         LMLI_observados$Hora == '19:00:00' | LMLI_observados$Hora == '20:00:00' |
+                         LMLI_observados$Hora == '21:00:00' | LMLI_observados$Hora == '22:00:00' |
+                         LMLI_observados$Hora == '23:00:00')
+
+#DATOS MODELADOS. 
+#Obtenemos de la base de datos de WRF los correspondientes a Altzomoni: 
+LMLI_vars <- c("LMLI_T", "LMLI_P1", "LMLI_P2")
+LMLI_07_13_WRF <- wrf[LMLI_vars]
+
+#Convertimos la columna de temperatura a grados centigrados:
+LMLI_07_13_WRF$LMLI_T <- LMLI_07_13_WRF$LMLI_T - 273
+
+#TABLA TEMPERATURA  
+#Merge temoeratura modelada y observada. 
+LMLI_temperatura <- as.data.frame(cbind(LMLI_horaria$Temp, LMLI_07_13_WRF$LMLI_T))
+colnames(LMLI_temperatura) <- c("TempObs", "TempWRF")
+
+#Convertimos de factor a numeric los valores de temperatura. 
+LMLI_temperatura$TempObs <- as.numeric(as.character(LMLI_temperatura$TempObs))
+LMLI_temperatura$TempWRF <- as.numeric(as.character(LMLI_temperatura$TempWRF))
+
+LMLI_diffobsmod <- LMLI_temperatura$TempWRF-LMLI_temperatura$TempObs
+LMLI_temp_meandiff <- mean(LMLI_diffobsmod)
+
+mean(LMLI_temperatura$TempObs)
+mean(LMLI_temperatura$TempWRF)
+
+############### ESTACION LA MALINCHE II #####################
+
+#Importamos la base de datos observados de la estación. 
+library(readxl)
+MLII_07_13 <- read_excel("/Volumes/Seagate/Tesis/obs_julio/MLII_07_13.xlsx")
+View(MLII_07_13)
+
+#Nos quedamos con las columnas de las variables "fecha", "TempAire" y "Precipitacion".
+myvars <- c("fecha", "TempAire", "Precipitacion")
+MLII_07_13 <- MLII_07_13[myvars]
+
+#Determinamos el numero de NAs en las dos variables
+sum(is.na(MLII_07_13$TempAire)) # 6 NA. Las 6 últimas observaciones. 
+sum(is.na(MLII_07_13$Precipitacion)) #6 NA. Las 6 últimas observaciones 
+
+
+##Los ultimos 5 registros (NA) los llenamos con el ultimo valor registrado. 
+MLII_07_13$TempAire[is.na(MLII_07_13$TempAire)] <- 18.5
+MLII_07_13$Precipitacion[is.na(MLII_07_13$Precipitacion)] <- 0
+
+
+#Agregamos columna de fecha a ALTZ_interpol. 
+MLII_observados <- MLII_07_13
+colnames(MLII_observados) <- c("Fecha", "Temp", "Prec")
+
+#Separamos la fecha en Mes, Dia y Hora.
+separafecha <- as.character(MLII_observados$Fecha)
+
+MLII_observados$Mes <- Mes
+MLII_observados$Dia <- Dia
+MLII_observados$Hora <- Hora
+
+
+#Para la variable de temperatura extraemos solo los datos de cada hora exacta.
+MLII_horaria <- subset(MLII_observados, MLII_observados$Hora == '00:00:00' | 
+                         MLII_observados$Hora == '01:00:00' | MLII_observados$Hora == '02:00:00' | 
+                         MLII_observados$Hora == '03:00:00' | MLII_observados$Hora == '04:00:00' | 
+                         MLII_observados$Hora == '05:00:00' | MLII_observados$Hora == '06:00:00' |
+                         MLII_observados$Hora == '07:00:00' | MLII_observados$Hora == '08:00:00' | 
+                         MLII_observados$Hora == '09:00:00' | MLII_observados$Hora == '10:00:00' |
+                         MLII_observados$Hora == '11:00:00' | MLII_observados$Hora == '12:00:00' |
+                         MLII_observados$Hora == '13:00:00' | MLII_observados$Hora == '14:00:00' |
+                         MLII_observados$Hora == '15:00:00' | MLII_observados$Hora == '16:00:00' |
+                         MLII_observados$Hora == '17:00:00' | MLII_observados$Hora == '18:00:00' |
+                         MLII_observados$Hora == '19:00:00' | MLII_observados$Hora == '20:00:00' |
+                         MLII_observados$Hora == '21:00:00' | MLII_observados$Hora == '22:00:00' |
+                         MLII_observados$Hora == '23:00:00')
+
+#DATOS MODELADOS. 
+#Obtenemos de la base de datos de WRF los correspondientes a Altzomoni: 
+MLII_vars <- c("MLII_T", "MLII_P1", "MLII_P2")
+MLII_07_13_WRF <- wrf[MLII_vars]
+
+#Convertimos la columna de temperatura a grados centigrados:
+MLII_07_13_WRF$MLII_T <- MLII_07_13_WRF$MLII_T - 273
+
+#TABLA TEMPERATURA  
+#Merge temoeratura modelada y observada. 
+MLII_temperatura <- as.data.frame(cbind(MLII_horaria$Temp, MLII_07_13_WRF$MLII_T))
+colnames(MLII_temperatura) <- c("TempObs", "TempWRF")
+
+#Convertimos de factor a numeric los valores de temperatura. 
+MLII_temperatura$TempObs <- as.numeric(as.character(MLII_temperatura$TempObs))
+MLII_temperatura$TempWRF <- as.numeric(as.character(MLII_temperatura$TempWRF))
+
+MLII_diffobsmod <- MLII_temperatura$TempWRF-MLII_temperatura$TempObs
+MLII_temp_meandiff <- mean(MLII_diffobsmod)
+
+mean(MLII_temperatura$TempObs)
+mean(MLII_temperatura$TempWRF)
+
+############### PARQUE IZTA-POPO #####################
+
+
+#Importamos la base de datos observados de la estación. 
+library(readxl)
+PIZP_07_13 <- read_excel("/Volumes/Seagate/Tesis/obs_julio/PIZP_07_13.xlsx")
+View(PIZP_07_13)
+
+#Nos quedamos con las columnas de las variables "fecha", "TempAire" y "Precipitacion".
+myvars <- c("fecha", "TempAire", "Precipitacion")
+PIZP_07_13 <- PIZP_07_13[myvars]
+
+#Determinamos el numero de NAs en las dos variables
+sum(is.na(PIZP_07_13$TempAire)) # 6 NA. intermedios. 
+sum(is.na(PIZP_07_13$Precipitacion)) # 6 NA. intermedios.
+
+#Para los 10 NA intermedios corremos la funcion de interpolacion lineal. 
+PIZP_interpol <- as.data.frame(LinearInterpol(PIZP_07_13))
+
+#Agregamos columna de fecha a PIZP_interpol. 
+PIZP_observados <- cbind(PIZP_07_13$fecha, PIZP_interpol)
+colnames(PIZP_observados) <- c("Fecha", "Prec", "Temp")
+
+#Separamos la fecha en Mes, Dia y Hora.
+separafecha <- as.character(PIZP_observados$Fecha)
+
+PIZP_observados$Mes <- Mes
+PIZP_observados$Dia <- Dia
+PIZP_observados$Hora <- Hora
+
+
+#Para la variable de temperatura extraemos solo los datos de cada hora exacta.
+PIZP_horaria <- subset(PIZP_observados, PIZP_observados$Hora == '00:00:00' | 
+                         PIZP_observados$Hora == '01:00:00' | PIZP_observados$Hora == '02:00:00' | 
+                         PIZP_observados$Hora == '03:00:00' | PIZP_observados$Hora == '04:00:00' | 
+                         PIZP_observados$Hora == '05:00:00' | PIZP_observados$Hora == '06:00:00' |
+                         PIZP_observados$Hora == '07:00:00' | PIZP_observados$Hora == '08:00:00' | 
+                         PIZP_observados$Hora == '09:00:00' | PIZP_observados$Hora == '10:00:00' |
+                         PIZP_observados$Hora == '11:00:00' | PIZP_observados$Hora == '12:00:00' |
+                         PIZP_observados$Hora == '13:00:00' | PIZP_observados$Hora == '14:00:00' |
+                         PIZP_observados$Hora == '15:00:00' | PIZP_observados$Hora == '16:00:00' |
+                         PIZP_observados$Hora == '17:00:00' | PIZP_observados$Hora == '18:00:00' |
+                         PIZP_observados$Hora == '19:00:00' | PIZP_observados$Hora == '20:00:00' |
+                         PIZP_observados$Hora == '21:00:00' | PIZP_observados$Hora == '22:00:00' |
+                         PIZP_observados$Hora == '23:00:00')
+
+#DATOS MODELADOS. 
+#Obtenemos de la base de datos de WRF los correspondientes a PIZPomoni: 
+PIZP_vars <- c("PIZP_T", "PIZP_P1", "PIZP_P2")
+PIZP_07_13_WRF <- wrf[PIZP_vars]
+
+#Convertimos la columna de temperatura a grados centigrados:
+PIZP_07_13_WRF$PIZP_T <- PIZP_07_13_WRF$PIZP_T - 273
+
+#TABLA TEMPERATURA
+#Merge temperatura modelada y observada. 
+PIZP_temperatura <- as.data.frame(cbind(PIZP_horaria$Temp, PIZP_07_13_WRF$PIZP_T))
+colnames(PIZP_temperatura) <- c("TempObs", "TempWRF")
+
+#Convertimos de factor a numeric los valores de temperatura. 
+PIZP_temperatura$TempObs <- as.numeric(as.character(PIZP_temperatura$TempObs))
+PIZP_temperatura$TempWRF <- as.numeric(as.character(PIZP_temperatura$TempWRF))
+
+PIZP_diffobsmod <- PIZP_temperatura$TempWRF-PIZP_temperatura$TempObs
+PIZP_temp_meandiff <- mean(PIZP_diffobsmod)
+
+mean(PIZP_temperatura$TempObs)
+mean(PIZP_temperatura$TempWRF)
+
+############### ESTACION UNIVERSIDAD TECNOLOGICA DE TECAMACHALCO #####################
+
+#Importamos la base de datos observados de la estación. 
+library(readxl)
+UTTE_07_13 <- read_excel("/Volumes/Seagate/Tesis/obs_julio/UTTE_07_13.xlsx")
+View(UTTE_07_13)
+
+#Nos quedamos con las columnas de las variables "fecha", "TempAire" y "Precipitacion".
+myvars <- c("fecha", "TempAire", "Precipitacion")
+UTTE_07_13 <- UTTE_07_13[myvars]
+
+#Determinamos el numero de NAs en las dos variables
+sum(is.na(UTTE_07_13$TempAire)) # 6 NA. intermedios. 
+sum(is.na(UTTE_07_13$Precipitacion)) # 6 NA. intermedios.
+
+#Para los 10 NA intermedios corremos la funcion de interpolacion lineal. 
+UTTE_interpol <- as.data.frame(LinearInterpol(UTTE_07_13))
+
+#Agregamos columna de fecha a UTTE_interpol. 
+UTTE_observados <- cbind(UTTE_07_13$fecha, UTTE_interpol)
+colnames(UTTE_observados) <- c("Fecha", "Prec", "Temp")
+
+#Separamos la fecha en Mes, Dia y Hora.
+separafecha <- as.character(UTTE_observados$Fecha)
+
+UTTE_observados$Mes <- Mes
+UTTE_observados$Dia <- Dia
+UTTE_observados$Hora <- Hora
+
+
+#Para la variable de temperatura extraemos solo los datos de cada hora exacta.
+UTTE_horaria <- subset(UTTE_observados, UTTE_observados$Hora == '00:00:00' | 
+                         UTTE_observados$Hora == '01:00:00' | UTTE_observados$Hora == '02:00:00' | 
+                         UTTE_observados$Hora == '03:00:00' | UTTE_observados$Hora == '04:00:00' | 
+                         UTTE_observados$Hora == '05:00:00' | UTTE_observados$Hora == '06:00:00' |
+                         UTTE_observados$Hora == '07:00:00' | UTTE_observados$Hora == '08:00:00' | 
+                         UTTE_observados$Hora == '09:00:00' | UTTE_observados$Hora == '10:00:00' |
+                         UTTE_observados$Hora == '11:00:00' | UTTE_observados$Hora == '12:00:00' |
+                         UTTE_observados$Hora == '13:00:00' | UTTE_observados$Hora == '14:00:00' |
+                         UTTE_observados$Hora == '15:00:00' | UTTE_observados$Hora == '16:00:00' |
+                         UTTE_observados$Hora == '17:00:00' | UTTE_observados$Hora == '18:00:00' |
+                         UTTE_observados$Hora == '19:00:00' | UTTE_observados$Hora == '20:00:00' |
+                         UTTE_observados$Hora == '21:00:00' | UTTE_observados$Hora == '22:00:00' |
+                         UTTE_observados$Hora == '23:00:00')
+
+#DATOS MODELADOS. 
+#Obtenemos de la base de datos de WRF los correspondientes a UTTEomoni: 
+UTTE_vars <- c("UTTE_T", "UTTE_P1", "UTTE_P2")
+UTTE_07_13_WRF <- wrf[UTTE_vars]
+
+#Convertimos la columna de temperatura a grados centigrados:
+UTTE_07_13_WRF$UTTE_T <- UTTE_07_13_WRF$UTTE_T - 273
+
+
+#TABLA TEMPERATURA
+#Merge temperatura observada y modelada. 
+UTTE_temperatura <- as.data.frame(cbind(UTTE_horaria$Temp, UTTE_07_13_WRF$UTTE_T))
+colnames(UTTE_temperatura) <- c("TempObs", "TempWRF")
+
+#Convertimos de factor a numeric los valores de temperatura. 
+UTTE_temperatura$TempObs <- as.numeric(as.character(UTTE_temperatura$TempObs))
+UTTE_temperatura$TempWRF <- as.numeric(as.character(UTTE_temperatura$TempWRF))
+
+UTTE_diffobsmod <- UTTE_temperatura$TempWRF-UTTE_temperatura$TempObs
+UTTE_temp_meandiff <- mean(UTTE_diffobsmod)
+
+mean(UTTE_temperatura$TempObs)
+mean(UTTE_temperatura$TempWRF)
+
+############### ESTACION VALLE DE BRAVO #####################
+
+#Importamos la base de datos observados de la estación. 
+library(readxl)
+VLBR_07_13 <- read_excel("/Volumes/Seagate/Tesis/obs_julio/VLBR_07_13.xlsx")
+View(VLBR_07_13)
+
+#Nos quedamos con las columnas de las variables "fecha", "TempAire" y "Precipitacion".
+myvars <- c("fecha", "TempAire", "Precipitacion")
+VLBR_07_13 <- VLBR_07_13[myvars]
+
+#Determinamos el numero de NAs en las dos variables
+sum(is.na(VLBR_07_13$TempAire)) # 10 NA. 5 intermedios y los 5 ultimos. 
+sum(is.na(VLBR_07_13$Precipitacion)) # 10 NA. 5 intermedios y los 5 ultimos. 
+
+#Para los 10 NA intermedios corremos la funcion de interpolacion lineal. 
+VLBR_interpol <- as.data.frame(LinearInterpol(VLBR_07_13))
+
+#Los ultimos 5 NA los llenamos con el ultimo valor registrado. 
+VLBR_interpol$TempAire[is.na(VLBR_07_13_interpol$TempAire)] <- 19.8
+
+VLBR_interpol$Precipitacion[is.na(VLBR_07_13_interpol$Precipitacion)] <- 0
+
+#Agregamos columna de fecha a VLBR_interpol. 
+VLBR_observados <- cbind(VLBR_07_13$fecha, VLBR_interpol)
+colnames(VLBR_observados) <- c("Fecha", "Prec", "Temp")
+
+#Separamos la fecha en Mes, Dia y Hora.
+separafecha <- as.character(VLBR_observados$Fecha)
+
+VLBR_observados$Mes <- Mes
+VLBR_observados$Dia <- Dia
+VLBR_observados$Hora <- Hora
+
+
+#Para la variable de temperatura extraemos solo los datos de cada hora exacta.
+VLBR_horaria <- subset(VLBR_observados, VLBR_observados$Hora == '00:00:00' | 
+                         VLBR_observados$Hora == '01:00:00' | VLBR_observados$Hora == '02:00:00' | 
+                         VLBR_observados$Hora == '03:00:00' | VLBR_observados$Hora == '04:00:00' | 
+                         VLBR_observados$Hora == '05:00:00' | VLBR_observados$Hora == '06:00:00' |
+                         VLBR_observados$Hora == '07:00:00' | VLBR_observados$Hora == '08:00:00' | 
+                         VLBR_observados$Hora == '09:00:00' | VLBR_observados$Hora == '10:00:00' |
+                         VLBR_observados$Hora == '11:00:00' | VLBR_observados$Hora == '12:00:00' |
+                         VLBR_observados$Hora == '13:00:00' | VLBR_observados$Hora == '14:00:00' |
+                         VLBR_observados$Hora == '15:00:00' | VLBR_observados$Hora == '16:00:00' |
+                         VLBR_observados$Hora == '17:00:00' | VLBR_observados$Hora == '18:00:00' |
+                         VLBR_observados$Hora == '19:00:00' | VLBR_observados$Hora == '20:00:00' |
+                         VLBR_observados$Hora == '21:00:00' | VLBR_observados$Hora == '22:00:00' |
+                         VLBR_observados$Hora == '23:00:00')
+
+#DATOS MODELADOS. 
+#Obtenemos de la base de datos de WRF los correspondientes a VLBRomoni: 
+VLBR_vars <- c("VLBR_T", "VLBR_P1", "VLBR_P2")
+VLBR_07_13_WRF <- wrf[VLBR_vars]
+
+#Convertimos la columna de temperatura a grados centigrados:
+VLBR_07_13_WRF$VLBR_T <- VLBR_07_13_WRF$VLBR_T - 273
+
+
+#TABLA TEMPERATURA
+#Merge tempratura modelada y observada. 
+VLBR_temperatura <- as.data.frame(cbind(VLBR_horaria$Temp, VLBR_07_13_WRF$VLBR_T))
+colnames(VLBR_temperatura) <- c("TempObs", "TempWRF")
+
+
+#Convertimos de factor a numeric los valores de temperatura. 
+VLBR_temperatura$TempObs <- as.numeric(as.character(VLBR_temperatura$TempObs))
+VLBR_temperatura$TempWRF <- as.numeric(as.character(VLBR_temperatura$TempWRF))
+
+VLBR_diffobsmod <- VLBR_temperatura$TempWRF-VLBR_temperatura$TempObs
+VLBR_temp_meandiff <- mean(VLBR_diffobsmod)
+
+mean(VLBR_temperatura$TempObs)
+mean(VLBR_temperatura$TempWRF)
