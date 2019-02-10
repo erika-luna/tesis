@@ -1,0 +1,209 @@
+#Este script limpia los datos observados y modelados para el año de validación 2013.
+#Las bases de datos observados (Obs) son del mes de julio de 2013 y 
+  #fueron otenidos de las Estaciones Meteorológicas Automáticas (EMAS). 
+#Los Obs contienen una observación cada 10 minutos, la temperatura viene en grados centígrados y
+  #la precipitación de cada observación no es acumulada, sino la correspondiente a solo ese periodo 
+  #de tiempo (10 min). 
+#Los datos modelados (WRF) contienen una observación por hora, la temperatura viene en grados kelvin y 
+  #la precipitación que se registra en cada observación es la acumulada desde que el modelo se empezó a 
+  #correr (25 de junio en este caso).
+#Debido a que algunos de los datos observados contenían NAs, en este script se ejemplifica el procedimiento
+  #a seguir con una estacion que no tiene NAs y el procedimiento a seguir con una estación sin NAs. 
+#Los objetos finales de este script son:
+  #1. Una base de datos que contenga la temperatura observada y modelada horaria de todas las estaciones.
+  #2. Una base de datos que contenga la precipitación acumulada observada y modelada horaria de todas las estaciones.  
+
+
+###### FUNCIONES #######
+#Para separar la fecha en Mes, Dia y Hora:
+destringmes <- function(x){
+  a <- strsplit(x, "-")[[1]]
+  a[2]
+}
+
+destringdia <- function(x){
+  a <- strsplit(x, " ")[[1]]
+  b <- strsplit(a, "-")[[1]]
+  b[3]
+}
+
+destringhora <- function(x){
+  a <- strsplit(x, " ")[[1]]
+  a[2]
+}
+
+Mes <- rep(0,4462)
+Dia <- rep(0,4464)
+Hora <- rep(0,4464)
+
+for (i in 1:4464){
+  Mes[i] <- destringmes(separafecha[i])
+  Dia[i] <- destringdia(separafecha[i])
+  Hora[i]<- destringhora(separafecha[i])
+} 
+
+
+#INTERPOLACION LINEAL para missing values:
+#Cargar paquete zoo.
+
+LinearInterpol<- function (x) {
+  Precipitacion<-na.approx(x[,3],  na.rm = FALSE) 
+  Temperatura<-na.approx(x[,2],  na.rm = FALSE) 
+  Weather<-cbind(Precipitacion,Temperatura)
+  return(Weather)
+}
+
+
+
+###### ESTACION SIN NAs #######
+
+#EJEMPLO CON ESTACION ATLACOMULCO (ATLC)
+
+#Importamos la base de datos observados de la estación:
+library(readxl)
+ATLC_07_13 <- read_excel("/Volumes/Seagate/Tesis/obs_julio/ATLC_07_13.xlsx")
+View(ATLC_07_13)
+
+#Nos quedamos con las columnas de las variables "fecha", "TempAire" y "Precipitacion":
+myvars <- c("fecha", "TempAire", "Precipitacion")
+ATLC_07_13 <- ATLC_07_13[myvars]
+
+#Determinamos el numero de NAs en las dos variables:
+sum(is.na(ATLC_07_13$TempAire)) #No hay NA. 
+sum(is.na(ATLC_07_13$Precipitacion)) #No hay NA.
+
+#Reenombramos la base y las variables de los datos observados: 
+ATLC_Obs <- ATLC_07_13
+colnames(ATLC_Obs) <- c("Fecha", "Temp", "Prec")
+
+#Separamos la fecha en Mes, Dia y Hora (correr primero la función del inicio del script):
+separafecha <- as.character(ATLC_Obs$Fecha)
+
+ATLC_Obs$Mes <- Mes
+ATLC_Obs$Dia <- Dia
+ATLC_Obs$Hora <- Hora
+
+#Para la variable de temperatura extraemos solo los datos de cada hora en punto:
+ATLC_Obs_temp <- subset(ATLC_Obs, ATLC_Obs$Hora == '00:00:00' | 
+                          ATLC_Obs$Hora == '01:00:00' | ATLC_Obs$Hora == '02:00:00' | 
+                          ATLC_Obs$Hora == '03:00:00' | ATLC_Obs$Hora == '04:00:00' | 
+                          ATLC_Obs$Hora == '05:00:00' | ATLC_Obs$Hora == '06:00:00' |
+                          ATLC_Obs$Hora == '07:00:00' | ATLC_Obs$Hora == '08:00:00' | 
+                          ATLC_Obs$Hora == '09:00:00' | ATLC_Obs$Hora == '10:00:00' |
+                          ATLC_Obs$Hora == '11:00:00' | ATLC_Obs$Hora == '12:00:00' |
+                          ATLC_Obs$Hora == '13:00:00' | ATLC_Obs$Hora == '14:00:00' |
+                          ATLC_Obs$Hora == '15:00:00' | ATLC_Obs$Hora == '16:00:00' |
+                          ATLC_Obs$Hora == '17:00:00' | ATLC_Obs$Hora == '18:00:00' |
+                          ATLC_Obs$Hora == '19:00:00' | ATLC_Obs$Hora == '20:00:00' |
+                          ATLC_Obs$Hora == '21:00:00' | ATLC_Obs$Hora == '22:00:00' |
+                          ATLC_Obs$Hora == '23:00:00')
+
+#quitar columna de precipitacion (para la precipitación es un procedimiento diferente): 
+ATLC_Obs_temp$Prec <- NULL
+
+#DATOS MODELADOS. 
+#Obtenemos de la base de datos de WRF los correspondientes a Altzomoni: 
+ATLC_vars <- c("ATLC_T", "ATLC_P1", "ATLC_P2")
+ATLC_WRF <- wrf[ATLC_vars]
+
+#Convertimos la columna de temperatura a grados centigrados:
+ATLC_WRF$ATLC_T <- ATLC_WRF$ATLC_T - 273
+
+#TABLA TEMPERATURA
+#Merge temperatura observada y modelada:
+ATLC_temperatura <- as.data.frame(cbind(ATLC_Obs_temp$Temp, ATLC_WRF$ATLC_T))
+colnames(ATLC_temperatura) <- c("TempObs", "TempWRF")
+
+
+#Convertimos de factor a numeric los valores de temperatura. 
+ATLC_temperatura$TempObs <- as.numeric(as.character(ATLC_temperatura$TempObs))
+ATLC_temperatura$TempWRF <- as.numeric(as.character(ATLC_temperatura$TempWRF))
+
+ATLC_diffobsmod <- ATLC_temperatura$TempWRF-ATLC_temperatura$TempObs
+ATLC_temp_meandiff <- mean(ATLC_diffobsmod)
+
+
+######## ESTACION CON NAs ###########
+
+#EJEMPLO CON ESTACION ALTZOMONI
+#Importamos la base de datos observados de la estación:
+library(readxl)
+ALTZ_07_13 <- read_excel("/Volumes/Seagate/Tesis/obs_julio/ALTZ_07_13.xlsx")
+View(ALTZ_07_13)
+
+#Nos quedamos con las columnas de las variables "fecha", "TempAire" y "Precipitacion":
+myvars <- c("fecha", "TempAire", "Precipitacion")
+ALTZ_07_13 <- ALTZ_07_13[myvars]
+
+#Determinamos el numero de NAs en las dos variables:
+sum(is.na(ALTZ_07_13$TempAire)) #15 NA. 10 intermedios y los últimos 5. 
+sum(is.na(ALTZ_07_13$Precipitacion)) #15 NA. 10 intermedios y los últimos 5.
+
+#Para los 10 NA intermedios corremos la funcion de interpolacion lineal:
+ALTZ_interpol <- as.data.frame(LinearInterpol(ALTZ_07_13))
+
+#Los ultimos 5 NA los llenamos con el ultimo valor registrado: 
+ALTZ_interpol$TempAire[is.na(ALTZ_interpol$TempAire)] <- 9.8
+
+ALTZ_interpol$Precipitacion[is.na(ALTZ_interpol$Precipitacion)] <- 0
+
+#Agregamos columna de fecha a ALTZ_interpol: 
+ALTZ_Obs <- cbind(ALTZ_07_13$fecha, ALTZ_interpol)
+colnames(ALTZ_Obs) <- c("Fecha", "Prec", "Temp")
+
+#Separamos la fecha en Mes, Dia y Hora:
+separafecha <- as.character(ALTZ_Obs$Fecha)
+
+ALTZ_Obs$Mes <- Mes
+ALTZ_Obs$Dia <- Dia
+ALTZ_Obs$Hora <- Hora
+
+#Para la variable de temperatura extraemos solo los datos de cada hora exacta:
+ALTZ_Obs_temp <- subset(ALTZ_Obs, ALTZ_Obs$Hora == '00:00:00' | 
+                         ALTZ_Obs$Hora == '01:00:00' | ALTZ_Obs$Hora == '02:00:00' | 
+                         ALTZ_Obs$Hora == '03:00:00' | ALTZ_Obs$Hora == '04:00:00' | 
+                         ALTZ_Obs$Hora == '05:00:00' | ALTZ_Obs$Hora == '06:00:00' |
+                         ALTZ_Obs$Hora == '07:00:00' | ALTZ_Obs$Hora == '08:00:00' | 
+                         ALTZ_Obs$Hora == '09:00:00' | ALTZ_Obs$Hora == '10:00:00' |
+                         ALTZ_Obs$Hora == '11:00:00' | ALTZ_Obs$Hora == '12:00:00' |
+                         ALTZ_Obs$Hora == '13:00:00' | ALTZ_Obs$Hora == '14:00:00' |
+                         ALTZ_Obs$Hora == '15:00:00' | ALTZ_Obs$Hora == '16:00:00' |
+                         ALTZ_Obs$Hora == '17:00:00' | ALTZ_Obs$Hora == '18:00:00' |
+                         ALTZ_Obs$Hora == '19:00:00' | ALTZ_Obs$Hora == '20:00:00' |
+                         ALTZ_Obs$Hora == '21:00:00' | ALTZ_Obs$Hora == '22:00:00' |
+                         ALTZ_Obs$Hora == '23:00:00')
+
+#quitar columna de precipitacion (para la precipitación es un procedimiento diferente): 
+ALTZ_Obs_temp$Prec <- NULL
+
+#DATOS MODELADOS. 
+#Obtenemos de la base de datos de WRF los correspondientes a Altzomoni: 
+ALTZ_vars <- c("ALTZ_T", "ALTZ_P1", "ALTZ_P2")
+ALTZ_WRF <- wrf[ALTZ_vars]
+
+#Convertimos la columna de temperatura a grados centigrados:
+ALTZ_WRF$ALTZ_T <- ALTZ_WRF$ALTZ_T - 273
+
+
+#TABLA TEMPERATURA
+#Merge temperatura modelada y observada: 
+ALTZ_temperatura <- as.data.frame(cbind(ALTZ_Obs_temp$Temp, ALTZ_WRF$ALTZ_T))
+colnames(ALTZ_temperatura) <- c("TempObs", "TempWRF")
+
+
+#Convertimos de factor a numeric los valores de temperatura. 
+ALTZ_temperatura$TempObs <- as.numeric(as.character(ALTZ_temperatura$TempObs))
+ALTZ_temperatura$TempWRF <- as.numeric(as.character(ALTZ_temperatura$TempWRF))
+
+ALTZ_diffobsmod <- ALTZ_temperatura$TempWRF-ALTZ_temperatura$TempObs
+ALTZt_temp_meandiff <- mean(ALTZ_diffobsmod)
+
+mean(ALTZ_temperatura$TempObs)
+mean(ALTZ_temperatura$TempWRF)
+
+
+
+
+######## OBJETOS FINALES ############
+
+#ALTZ_temperatura, ATLC_temperatura, CRCA_temperatura, 
