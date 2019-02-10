@@ -206,4 +206,18 @@ mean(ALTZ_temperatura$TempWRF)
 
 ######## OBJETOS FINALES ############
 
-#ALTZ_temperatura, ATLC_temperatura, CRCA_temperatura, 
+#TEMPERATURA DATA FRAME TODAS LAS ESTACIONES
+temperatura_obswrf <- as.data.frame(rbind(ALTZ_temperatura, ATLC_temperatura, CRCA_temperatura, ECOG_temperatura,
+                                          HCHP_temperatura, HMNT_temperatura, IGUA_temperatura, IMTA_temperatura,
+                                          IZMT_temperatura, LCHI_temperatura, LGZM_temperatura, LMLI_temperatura,
+                                          MLII_temperatura, NVTO_temperatura, PIZP_temperatura, PRMD_temperatura, 
+                                          SRHT_temperatura, TRMS_temperatura, TZNT_temperatura, UTTE_temperatura, 
+                                          VLBR_temperatura))
+
+#Vector con nombre de las estaciones:
+Estaciones <- c("ALTZ", "ATLC", "CRCA", "ECOG", "HCHP", "HMNT", "IGUA", "IMTA", "IZMT", "LCHI",
+                "LGZM", "LMLI", "MLII", "NVTO", "PIZP", "PRMD", "SRHT", "TRMS", "TZNT", "UTTE", "VLBR")
+Nueva <- rep(Estaciones, each=length(ALTZ_temperatura[,1]))
+
+#Le ponemos nombre a nuestra nueva columna:
+temperatura_obswrf$Estaciones <- Nueva
