@@ -1,0 +1,86 @@
+####### FUNCIONES ######
+
+#Función para precipitación acumulada horaria:
+HourlyData<-function(Data){
+  HourSumPrec <- rollapply(Data[,1],6,(sum),by=6,by.column=TRUE,align='right')
+}
+
+#Funcion para precipitacion acumulada diaria:
+DailyData<-function(Data){
+  DailyPrec <- rollapply(Data[,1],24,(sum),by=24,by.column=TRUE,align='right')
+  WeatherDay <- DailyPrec
+  return(WeatherDay)
+}
+
+#Para separar la fecha en Mes, Dia y Hora:
+destringmes <- function(x){
+  a <- strsplit(x, "-")[[1]]
+  a[2]
+}
+
+destringdia <- function(x){
+  a <- strsplit(x, " ")[[1]]
+  b <- strsplit(a, "-")[[1]]
+  b[3]
+}
+
+destringhora <- function(x){
+  a <- strsplit(x, " ")[[1]]
+  a[2]
+}
+
+Mes <- rep(0,744)
+Dia <- rep(0,744)
+Hora <- rep(0,744)
+
+for (i in 1:744){
+  Mes[i] <- destringmes(separafecha[i])
+  Dia[i] <- destringdia(separafecha[i])
+  Hora[i]<- destringhora(separafecha[i])
+} 
+
+######### EJEMPLO CON ESTACION TEZONTLE (TZNT) #######
+
+#DATOS OBSERVADOS
+
+TZNT_Obs_prec_hourly <- as.data.frame(HourlyData(TZNT_interpol))
+colnames(TZNT_Obs_prec_hourly) <- c("PrecObs")
+
+TZNT_Obs_prec_daily <- as.data.frame(DailyData(TZNT_Obs_prec_hourly))
+colnames(TZNT_Obs_prec_daily) <- c("PrecObs")
+
+
+#DATOS MODELADOS
+
+TZNT_WRF$Fecha <- Fecha_julio
+
+#Separamos la fecha en Mes, Dia y Hora (correr primero la función del inicio del script):
+separafecha <- as.character(TZNT_WRF$Fecha)
+
+TZNT_WRF$Mes <- Mes
+TZNT_WRF$Dia <- Dia
+TZNT_WRF$Hora <- Hora
+
+#Para la variable de precipitación extraemos los datos de cada día:
+TZNT_WRF_prec_daily <- subset(TZNT_WRF, TZNT_WRF$Hora == '23:00:00')
+
+TZNT_WRF_prec_hourly <- subset(TZNT_WRF, TZNT_WRF$Dia == '01' | 
+                                 TZNT_WRF$Dia == '02' | TZNT_WRF$Dia == '03' | 
+                                 TZNT_WRF$Dia == '04' | TZNT_WRF$Dia == '05' | 
+                                 TZNT_WRF$Dia == '06' | TZNT_WRF$Dia == '07' |
+                                 TZNT_WRF$Dia == '08' | TZNT_WRF$Dia == '09' | 
+                                 TZNT_WRF$Dia == '10' | TZNT_WRF$Dia == '11' |
+                                 TZNT_WRF$Dia == '12' | TZNT_WRF$Dia == '13' |
+                                 TZNT_WRF$Dia == '14' | TZNT_WRF$Dia == '15' |
+                                 TZNT_WRF$Dia == '16' | TZNT_WRF$Dia == '17' |
+                                 TZNT_WRF$Dia == '18' | TZNT_WRF$Dia == '19' |
+                                 TZNT_WRF$Dia == '20' | TZNT_WRF$Dia == '21' |
+                                 TZNT_WRF$Dia == '22' | TZNT_WRF$Dia == '23' |
+                                 TZNT_WRF$Dia == '24' | TZNT_WRF$Dia == '25' | 
+                                 TZNT_WRF$Dia == '26' | TZNT_WRF$Dia == '27' | 
+                                 TZNT_WRF$Dia == '28' | TZNT_WRF$Dia == '29' |
+                                 TZNT_WRF$Dia == '30' | TZNT_WRF$Dia == '31')
+
+TZNT_WRF_prec_daily$PrecWRF <- ave(TZNT_WRF_prec_daily$TZNT_P2, FUN=function(x) c(0, diff(x)))
+vars <- c("Fecha", "Mes", "Dia", "Hora", "PrecWRF")
+TZNT_WRF_prec_daily <- TZNT_WRF_prec_daily[vars]
