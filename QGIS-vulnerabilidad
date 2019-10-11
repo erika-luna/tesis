@@ -1,0 +1,10 @@
+Los datos de vulnerabilidad ambiental, económica y social fueron obtenidos de Datos Abiertos de CONAGUA.
+
+CASE
+WHEN "Vulnerabil" IS 'Muy baja' THEN 1
+WHEN "Vulnerabil" IS 'Baja' THEN 2
+WHEN "Vulnerabil" IS 'Media' THEN 3
+WHEN "Vulnerabil" IS 'Alta' THEN 4
+WHEN "Vulnerabil" IS 'Muy alta' THEN 5
+ELSE 0
+END
